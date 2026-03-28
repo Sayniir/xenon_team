@@ -28,4 +28,4 @@ mac:
 publish:
   provider: github
   owner: sayniir
-  repo: xenon-team
+  repo: xenon_team
