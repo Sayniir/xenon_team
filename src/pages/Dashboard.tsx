@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
@@ -83,17 +84,26 @@ export default function Dashboard() {
     }
   })
 
-  // Classement (Leaderboard) calculé à la volée
+  // Classement — Utilise la RPC function côté serveur
   const { data: leaderboard = [] } = useQuery({
     queryKey: ['dashboard-leaderboard'],
     queryFn: async () => {
+      // Try RPC first (after migration 05), fallback to client-side
+      const { data: rpcData, error } = await supabase.rpc('get_leaderboard')
+      if (!error && rpcData) {
+        return rpcData.map((r: { user_id: string; full_name: string; avatar_url: string | null; total_minutes: number }) => ({
+          user: { id: r.user_id, full_name: r.full_name, avatar_url: r.avatar_url },
+          totalMinutes: Number(r.total_minutes)
+        }))
+      }
+      // Fallback: client-side (pre-migration)
       const { data } = await supabase
         .from('work_sessions')
         .select(`duration_minutes, profiles:user_id(id, full_name, avatar_url)`)
-
-      const stats = new Map<string, { user: any, totalMinutes: number }>()
+      type UserShape = { id: string; full_name: string; avatar_url: string | null }
+      const stats = new Map<string, { user: UserShape, totalMinutes: number }>()
       data?.forEach(session => {
-        const u = session.profiles as any
+        const u = session.profiles as unknown as UserShape | null
         if (!u) return
         const existing = stats.get(u.id)
         if (existing) {
@@ -102,15 +112,25 @@ export default function Dashboard() {
           stats.set(u.id, { user: u, totalMinutes: session.duration_minutes })
         }
       })
-      // Tri décroissant
       return Array.from(stats.values()).sort((a, b) => b.totalMinutes - a.totalMinutes).slice(0, 5)
     }
   })
 
-  const myStats = leaderboard.find(l => l.user.id === user?.id)
+  const myStats = leaderboard.find((l: { user: { id: string }; totalMinutes: number }) => l.user.id === user?.id)
   const myLevel = myStats ? Math.floor(myStats.totalMinutes / 60 / 10) + 1 : 1 // 1 level every 10 hours
   const myTotalHours = myStats ? (myStats.totalMinutes / 60) : 0
   const expProgress = (myTotalHours % 10) / 10 * 100 // % towards next level
+
+  const [showLevelUp, setShowLevelUp] = useState(false)
+  const prevLevelRef = useRef(myLevel)
+
+  useEffect(() => {
+    if (myLevel > prevLevelRef.current && prevLevelRef.current > 0) {
+      setShowLevelUp(true)
+      setTimeout(() => setShowLevelUp(false), 4000)
+    }
+    prevLevelRef.current = myLevel
+  }, [myLevel])
 
   return (
     <div className="page animate-fade-in">
@@ -185,7 +205,7 @@ export default function Dashboard() {
                 <p className="text-sm text-secondary">Personne n'a encore enregistré de session.</p>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {leaderboard.slice(0, 3).map((item, index) => {
+                  {leaderboard.slice(0, 3).map((item: { user: { id: string; full_name: string; avatar_url: string | null }; totalMinutes: number }, index: number) => {
                     const hours = Math.floor(item.totalMinutes / 60)
                     const mins = item.totalMinutes % 60
                     const isMe = item.user.id === user?.id
@@ -366,6 +386,30 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {showLevelUp && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)',
+          animation: 'fade-in 0.3s ease-out'
+        }}>
+          <div style={{ textAlign: 'center', transform: 'scale(1)', animation: 'level-up-pop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275)' }}>
+            <style>{`
+              @keyframes level-up-pop {
+                0% { transform: scale(0.5); opacity: 0; }
+                100% { transform: scale(1); opacity: 1; }
+              }
+            `}</style>
+            <Trophy size={100} style={{ color: 'var(--warning)', margin: '0 auto 24px', filter: 'drop-shadow(0 0 30px var(--warning))' }} />
+            <h2 style={{ fontSize: '3rem', fontWeight: 900, color: 'white', textShadow: '0 0 20px rgba(255,255,255,0.8)', marginBottom: 16 }}>
+              Niveau Supérieur !
+            </h2>
+            <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--primary-400)', background: 'rgba(123, 47, 242, 0.2)', padding: '12px 24px', borderRadius: 100, display: 'inline-block' }}>
+              Vous avez atteint le niveau {myLevel} 🚀
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

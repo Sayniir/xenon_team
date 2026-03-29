@@ -90,6 +90,13 @@ export function useRealtimeSync() {
           queryClient.invalidateQueries({ queryKey: ['dashboard-leaderboard'] })
         }
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'chat_messages' },
+        (_payload) => {
+          queryClient.invalidateQueries({ queryKey: ['chat-messages'] })
+        }
+      )
       .subscribe()
 
     return () => {

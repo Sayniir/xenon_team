@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Play, Square, Save, X, Clock, Edit2 } from 'lucide-react'
+import { Plus, Play, Square, Save, X, Clock, Edit2, CheckCircle } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../stores/authStore'
@@ -11,7 +11,7 @@ export default function LogWorkModal({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient()
   const timer = useTimerStore()
   const [mode, setMode] = useState<'timer' | 'manual'>('timer')
-  
+
   // Real-time tick for UI
   const [ticks, setTicks] = useState(0)
   useEffect(() => {
@@ -54,9 +54,9 @@ export default function LogWorkModal({ onClose }: { onClose: () => void }) {
       if (error) throw error
       // Extra log activity for gamification
       const actRes = await supabase.from('activities').insert({
-        user_id: user!.id, 
+        user_id: user!.id,
         action: 'logged_work',
-        entity_type: 'work_session', 
+        entity_type: 'work_session',
         entity_id: '00000000-0000-0000-0000-000000000000', // avoid crypto random issue if any
         metadata: { duration: payload.duration_minutes, desc: payload.description }
       })
@@ -64,33 +64,65 @@ export default function LogWorkModal({ onClose }: { onClose: () => void }) {
         console.error("Activity error", actRes.error)
       }
     },
-    onError: (err: any) => {
+    onMutate: async (payload) => {
+      // Optimistic close
+      onClose()
+
+      // Optimistic update for leaderboard so it triggers level up instantly if applicable
+      await queryClient.cancelQueries({ queryKey: ['dashboard-leaderboard'] })
+      const previousLeaderboard = queryClient.getQueryData(['dashboard-leaderboard'])
+
+      queryClient.setQueryData(['dashboard-leaderboard'], (old: any) => {
+        if (!old) return old
+        // find me
+        const newLeaderboard = old.map((l: any) => {
+          if (l.user.id === user?.id) {
+            return { ...l, totalMinutes: l.totalMinutes + payload.duration_minutes }
+          }
+          return l
+        })
+        // sort again
+        return newLeaderboard.sort((a: any, b: any) => b.totalMinutes - a.totalMinutes)
+      })
+
+      return { previousLeaderboard }
+    },
+    onError: (err: any, _variables, context) => {
+      if (context?.previousLeaderboard) {
+        queryClient.setQueryData(['dashboard-leaderboard'], context.previousLeaderboard)
+      }
       alert("Erreur lors de la sauvegarde : " + err.message)
       console.error(err)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['work-sessions'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard-activity'] })
-      onClose()
+      queryClient.invalidateQueries({ queryKey: ['dashboard-leaderboard'] })
     }
   })
 
   const handleSaveTimer = () => {
-    const totalMinutes = Math.floor(totalSecs / 60)
-    if (totalMinutes === 0) return alert('Session trop courte (min 1 minute).')
-    
-    // Stop the timer
+    // Calcul de la durée en minutes, mais on laisse 1 min minimum même si c'est qques secondes (pour les tests)
+    const totalMinutes = Math.max(1, Math.floor(totalSecs / 60))
+
+    // Sauvegarde des infos avant reset
+    const payload = {
+      duration_minutes: totalMinutes,
+      description: timer.description,
+      project_id: timer.projectId
+    }
+
+    // Stop and reset the timer immediately since modal unmounts optimistically
     timer.pause()
-    saveSession.mutate(
-      { duration_minutes: totalMinutes, description: timer.description, project_id: timer.projectId },
-      { onSuccess: () => timer.reset() }
-    )
+    timer.reset()
+
+    saveSession.mutate(payload)
   }
 
   const handleSaveManual = () => {
     const totalMinutes = (parseInt(manHours) || 0) * 60 + (parseInt(manMins) || 0)
     if (totalMinutes === 0) return alert('La durée doit être supérieure à 0.')
-    
+
     saveSession.mutate({ duration_minutes: totalMinutes, description: manDesc, project_id: manProject || null })
   }
 
@@ -115,19 +147,19 @@ export default function LogWorkModal({ onClose }: { onClose: () => void }) {
         <div className="modal-body">
           {mode === 'timer' ? (
             <div style={{ textAlign: 'center', padding: '16px 0' }}>
-              <div style={{ 
+              <div style={{
                 fontSize: '3rem', fontWeight: 800, fontFamily: 'monospace', color: timer.isRunning ? 'var(--primary-400)' : 'var(--text-primary)',
                 textShadow: timer.isRunning ? '0 0 20px rgba(123, 47, 242, 0.4)' : 'none',
                 transition: 'all 0.3s'
               }}>
                 {timeString}
               </div>
-              
+
               <div className="input-wrapper" style={{ textAlign: 'left', marginTop: 16 }}>
                 <label className="input-label">Sur quoi travaillez-vous ?</label>
                 <input className="input" placeholder="Description de la tâche..." value={timer.description} onChange={(e) => timer.setDescription(e.target.value)} disabled={timer.isRunning} />
               </div>
-              
+
               <div className="input-wrapper" style={{ textAlign: 'left' }}>
                 <label className="input-label">Projet lié</label>
                 <select className="input" value={timer.projectId || ''} onChange={(e) => timer.setProject(e.target.value)} disabled={timer.isRunning}>
@@ -147,12 +179,18 @@ export default function LogWorkModal({ onClose }: { onClose: () => void }) {
                   </button>
                 )}
 
-                {totalSecs >= 60 && !timer.isRunning && (
+                {timer.isRunning && (
+                  <button className="btn btn-success" style={{ padding: '12px 24px' }} onClick={handleSaveTimer} disabled={saveSession.isPending}>
+                    <CheckCircle size={20} /> Valider Mnt
+                  </button>
+                )}
+
+                {totalSecs > 0 && !timer.isRunning && (
                   <button className="btn btn-success" style={{ padding: '12px 24px' }} onClick={handleSaveTimer} disabled={saveSession.isPending}>
                     <Save size={20} /> {saveSession.isPending ? '...' : 'Valider Session'}
                   </button>
                 )}
-                
+
                 {totalSecs > 0 && !timer.isRunning && (
                   <button className="btn btn-ghost" onClick={() => timer.reset()}>Réinitialiser</button>
                 )}
@@ -170,7 +208,7 @@ export default function LogWorkModal({ onClose }: { onClose: () => void }) {
                   <input type="number" min="0" max="59" className="input" value={manMins} onChange={(e) => setManMins(e.target.value)} />
                 </div>
               </div>
-              
+
               <div className="input-wrapper">
                 <label className="input-label">Sur quoi avez-vous travaillé ?</label>
                 <input className="input" placeholder="Description courte..." value={manDesc} onChange={(e) => setManDesc(e.target.value)} />

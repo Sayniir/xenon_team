@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, ipcMain, Notification } from 'electron'
+import { app, BrowserWindow, shell, ipcMain, Notification, session } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { autoUpdater } from 'electron-updater'
@@ -22,7 +22,7 @@ function createWindow(): void {
     backgroundColor: '#08080f',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      sandbox: true,
       nodeIntegration: false,
       contextIsolation: true
     }
@@ -35,6 +35,20 @@ function createWindow(): void {
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
     return { action: 'deny' }
+  })
+
+  // Set Content Security Policy
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const csp = is.dev 
+      ? "default-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:* ws://localhost:* https://*.supabase.co wss://*.supabase.co https://fonts.googleapis.com https://fonts.gstatic.com data: blob:;"
+      : "default-src 'self' 'unsafe-inline' https://*.supabase.co wss://*.supabase.co https://fonts.googleapis.com https://fonts.gstatic.com data: blob:;"
+    
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [csp]
+      }
+    })
   })
 
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {

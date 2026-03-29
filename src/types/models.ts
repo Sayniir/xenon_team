@@ -77,6 +77,7 @@ export type Idea = {
   profiles?: UserProfile
   vote_count?: number
   user_vote?: number
+  idea_votes?: any[]
 }
 
 export type FileRecord = {
@@ -115,4 +116,12 @@ export type Notification = {
   entity_id: string | null
   is_read: boolean
   created_at: string
+}
+
+export type ChatMessage = {
+  id: string
+  content: string
+  author_id: string
+  created_at: string
+  profiles?: UserProfile
 }

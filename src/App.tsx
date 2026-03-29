@@ -3,6 +3,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { useAuthStore } from './stores/authStore'
 import { useRealtimeSync } from './hooks/useRealtimeSync'
+import ErrorBoundary from './components/shared/ErrorBoundary'
+import ToastContainer from './components/shared/ToastContainer'
 import MainLayout from './components/layout/MainLayout'
 import Login from './pages/Login'
 import Register from './pages/Register'
@@ -14,6 +16,7 @@ import Ideas from './pages/Ideas'
 import Files from './pages/Files'
 import ActivityPage from './pages/Activity'
 import Settings from './pages/Settings'
+import Chat from './pages/Chat'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -75,10 +78,12 @@ function AppContent() {
           <Route path="projects" element={<Projects />} />
           <Route path="ideas" element={<Ideas />} />
           <Route path="files" element={<Files />} />
+          <Route path="chat" element={<Chat />} />
           <Route path="activity" element={<ActivityPage />} />
           <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>
+      <ToastContainer />
     </BrowserRouter>
   )
 }
@@ -86,7 +91,9 @@ function AppContent() {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <AppContent />
+      <ErrorBoundary>
+        <AppContent />
+      </ErrorBoundary>
     </QueryClientProvider>
   )
 }

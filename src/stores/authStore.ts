@@ -16,6 +16,7 @@ interface AuthState {
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
   fetchProfile: (userId: string) => Promise<void>
+  refreshProfile: () => Promise<void>
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -91,6 +92,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       .single()
     if (data) {
       set({ user: data as UserProfile })
+    }
+  },
+
+  refreshProfile: async () => {
+    const { session } = get()
+    if (session?.user) {
+      await get().fetchProfile(session.user.id)
     }
   }
 }))

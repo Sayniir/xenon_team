@@ -7,7 +7,6 @@ export default function AutoUpdater() {
   const [downloaded, setDownloaded] = useState(false)
 
   useEffect(() => {
-    // @ts-ignore - Exists via contextBridge
     const updater = window.electronAPI?.updater
     if (!updater) return
 
@@ -48,8 +47,8 @@ export default function AutoUpdater() {
             {downloaded ? 'Mise à jour prête !' : 'Mise à jour en cours...'}
           </h4>
           <p className="text-xs text-secondary">
-            {downloaded 
-              ? "L'Échelon Supérieur est prêt à être installé." 
+            {downloaded
+              ? "L'Échelon Supérieur est prêt à être installé."
               : "Téléchargement silencieux en arrière-plan."
             }
           </p>
@@ -63,8 +62,8 @@ export default function AutoUpdater() {
             <span className="font-bold" style={{ color: 'var(--primary-400)' }}>{progress}%</span>
           </div>
           <div style={{ height: 6, background: 'rgba(255,255,255,0.1)', borderRadius: 10, overflow: 'hidden' }}>
-            <div style={{ 
-              height: '100%', 
+            <div style={{
+              height: '100%',
               width: `${progress}%`,
               background: 'linear-gradient(90deg, var(--primary-500), var(--accent-500))',
               transition: 'width 0.2s ease-out',
@@ -75,11 +74,10 @@ export default function AutoUpdater() {
       )}
 
       {downloaded && (
-        <button 
+        <button
           className="btn btn-primary w-full mt-2"
           onClick={() => {
-            // @ts-ignore
-            window.electronAPI.updater.quitAndInstall()
+            window.electronAPI?.updater.quitAndInstall()
           }}
         >
           Redémarrer et Installer 🚀
